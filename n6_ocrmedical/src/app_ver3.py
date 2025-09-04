@@ -101,7 +101,6 @@ class HistoryItem(QWidget):
         lay.addStretch()
         lay.addWidget(caret)
 
-
 class UploadRow(QWidget):
     """Một dòng file trong danh sách ở khung giữa."""
     def __init__(self, idx: int, filename: str, size_text: str, status: str = "Ready"):

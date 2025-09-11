@@ -541,13 +541,17 @@ class Dashboard(QWidget):
         selected = self.file_list.selectedItems()
         if not selected:
             return
+
         item = selected[0]
         full_path = item.data(Qt.UserRole)
 
         # 👉 Chuyển ngay sang ResultPage, hiển thị "Loading..."
         main_win = self.window()
         if hasattr(main_win, "result_page"):
+            # Cập nhật ảnh + file info
+            main_win.result_page.set_image_info(full_path)
             main_win.result_page.set_result("⏳ Đang chạy OCR với Qwen... vui lòng chờ.")
+
             main_win.show_result_page()
 
         # 👉 Tạo thread để gọi model

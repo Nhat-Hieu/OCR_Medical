@@ -5,57 +5,44 @@
 import sys, os
 from datetime import datetime
 from typing import List
-from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtCore import Qt, QSize, QTimer, Signal
 from PySide6.QtGui import QFontMetrics, QPainter, QPen, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFrame, QPushButton, QLabel, QListWidget, QListWidgetItem,
-    QFileDialog, QSizePolicy, QLineEdit, QButtonGroup
+    QFileDialog, QSizePolicy, QLineEdit, QButtonGroup, QStackedWidget
 )
-
+from PySide6.QtCore import QThread, Signal, QObject
 # =========================
 # 1) HẰNG SỐ & THIẾT KẾ
 # =========================
 
-# Chủ đề màu
-APP_BG   = "#e5e7eb"    # nền tổng thể
-PANEL_BG = "#ffffff"    # nền các thẻ/card
+APP_BG   = "#e5e7eb"
+PANEL_BG = "#ffffff"
 
-# Khoảng cách / bố cục
-GAP_OUTER   = 30         # lề ngoài cùng
-GAP_PANEL   = 26         # lề trong của card/panel
-GAP_CARD    = 22         # khoảng cách giữa các card
-GAP_INSIDE  = 14         # khoảng cách trong nội dung card
-GAP_BELOW_DROP = 20      # khoảng cách giữa dropzone và hàng "Storage Directory"
+GAP_OUTER   = 30
+GAP_PANEL   = 26
+GAP_CARD    = 22
+GAP_INSIDE  = 14
+GAP_BELOW_DROP = 20
 
-# Kích thước panel
 LEFT_W   = 170
 RIGHT_W  = 200
-FILE_LIST_HEIGHT = 200
-
-# Căn chỉnh sidebar so cho menu ngang với dropzone
+FILE_LIST_HEIGHT = 80
 SIDE_MENU_ALIGN_WITH_DROP = 44
 
-# Đường dẫn icon minh hoạ cho lời chào
 GREETING_ICONS = {
-    "morning":   "n6_ocrmedical/resources/sun.png",     # sáng: mặt trời + rainbow tuỳ bạn
-    "afternoon": "n6_ocrmedical/resources/cloud.png",   # trưa/chiều: mặt trời/mây dịu
-    "evening":   "n6_ocrmedical/resources/moon.png",    # tối sớm: trăng + sao
-    "night":     "n6_ocrmedical/resources/night.png",   # khuya: nền đêm
+    "morning":   "n6_ocrmedical/resources/logo/sun.png",
+    "afternoon": "n6_ocrmedical/resources/logo/cloud.png",
+    "evening":   "n6_ocrmedical/resources/logo/moon.png",
+    "night":     "n6_ocrmedical/resources/logo/night.png",
 }
-
 
 # =========================
 # 2) HÀM TIỆN ÍCH
 # =========================
 
 def human_size(path: str) -> str:
-    """
-    Trả về kích thước file dạng thân thiện: 'KB' / 'MB'.
-    - < 1 KB: hiển thị 1 KB
-    - < 1 MB: làm tròn xuống KB
-    - >= 1 MB: hiển thị 1 chữ số thập phân (tối đa), sau 10 MB thì bỏ thập phân
-    """
     try:
         size = os.path.getsize(path)
         if size < 1024:
@@ -69,17 +56,14 @@ def human_size(path: str) -> str:
         return "--"
 
 def elide(text: str, widget: QWidget, width: int) -> str:
-    """Cắt bớt chuỗi theo chiều rộng widget, thêm … ở cuối nếu tràn."""
     fm = QFontMetrics(widget.font())
     return fm.elidedText(text, Qt.ElideRight, width)
-
 
 # =========================
 # 3) WIDGET TÁI DÙNG
 # =========================
 
 class HistoryItem(QWidget):
-    """Một dòng trong khung Lịch sử (bên phải)."""
     def __init__(self, filename: str, size_text: str = "--"):
         super().__init__()
         lay = QHBoxLayout(self)
@@ -102,7 +86,6 @@ class HistoryItem(QWidget):
         lay.addWidget(caret)
 
 class UploadRow(QWidget):
-    """Một dòng file trong danh sách ở khung giữa."""
     def __init__(self, idx: int, filename: str, size_text: str, status: str = "Ready"):
         super().__init__()
         self.setStyleSheet("QLabel{background:transparent;}")
@@ -133,13 +116,8 @@ class UploadRow(QWidget):
         lay.addWidget(status_lbl, 0)
         lay.addWidget(size_lbl, 0, Qt.AlignRight)
 
-
 class DropZone(QWidget):
-    """
-    Khu vực kéo-thả hoặc click để chọn file.
-    Gọi callback on_files_added(List[str]) khi người dùng thêm file.
-    """
-    def __init__(self, on_files_added, icon_path="n6_ocrmedical/resources/arrow.png",
+    def __init__(self, on_files_added, icon_path="n6_ocrmedical/resources/logo/arrow.png",
                  icon_size=64, gap=2):
         super().__init__()
         self.on_files_added = on_files_added
@@ -147,7 +125,6 @@ class DropZone(QWidget):
         self.setMinimumHeight(170)
         self.setAttribute(Qt.WA_StyledBackground, True)
 
-        # Nền + viền chấm
         self.setStyleSheet(
             "QWidget{background:#eaf2ff; border-radius:12px;} "
             "QLabel{color:#1f2937;}"
@@ -170,7 +147,6 @@ class DropZone(QWidget):
         v.addWidget(self.text)
 
     def paintEvent(self, e):
-        """Vẽ viền nét đứt bo góc."""
         super().paintEvent(e)
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         pen = QPen(QColor("#397fd7")); pen.setStyle(Qt.DashLine); pen.setWidth(2)
@@ -179,7 +155,6 @@ class DropZone(QWidget):
         p.drawRoundedRect(r, 12, 12)
 
     def mousePressEvent(self, e):
-        """Click để mở hộp thoại chọn file."""
         if e.button() == Qt.LeftButton:
             files, _ = QFileDialog.getOpenFileNames(self, "Chọn file", "", "Tất cả (*.*)")
             if files:
@@ -193,14 +168,27 @@ class DropZone(QWidget):
         files = [u.toLocalFile() for u in e.mimeData().urls()]
         if files:
             self.on_files_added(files)
+class OCRWorker(QObject):
+    finished = Signal(str)   # emit khi xong OCR (trả về text)
 
+    def __init__(self, image_path, prompt):
+        super().__init__()
+        self.image_path = image_path
+        self.prompt = prompt
 
+    def run(self):
+        from lmstudio_client import call_qwen_ocr
+        try:
+            result = call_qwen_ocr(self.image_path, self.prompt)
+        except Exception as e:
+            result = f"[ERROR] {e}"
+        self.finished.emit(result)
 # =========================
-# 4) MÀN HÌNH CHÍNH (DASHBOARD)
+# 4) MÀN HÌNH CHÍNH
 # =========================
-
+from lmstudio_client import call_qwen_ocr
 class Dashboard(QWidget):
-    """Toàn bộ layout 3 cột: Sidebar | Nội dung | Lời chào + Lịch sử."""
+    result_requested = Signal()
     def __init__(self):
         super().__init__()
 
@@ -208,21 +196,14 @@ class Dashboard(QWidget):
         root.setContentsMargins(GAP_OUTER, GAP_OUTER, GAP_OUTER, GAP_OUTER)
         root.setSpacing(GAP_OUTER)
 
-        # --- 4.1 Sidebar trái
         left_panel = self._build_left_panel()
-
-        # --- 4.2 Khu giữa (thẻ chính + giới thiệu)
         mid_container = self._build_middle_panel()
-
-        # --- 4.3 Khu phải (lời chào + lịch sử)
         right_container = self._build_right_panel()
 
-        # Gắn vào root
         root.addWidget(left_panel, 0)
         root.addWidget(mid_container, 1)
         root.addWidget(right_container, 0)
 
-    # ----- 4.1
     def _build_left_panel(self) -> QWidget:
         panel = QFrame()
         panel.setFixedWidth(LEFT_W)
@@ -233,14 +214,12 @@ class Dashboard(QWidget):
         l.setContentsMargins(GAP_PANEL, GAP_PANEL, GAP_PANEL, GAP_PANEL)
         l.setSpacing(8)
 
-        # Logo / thương hiệu
         brand = QLabel()
-        logo = QPixmap("n6_ocrmedical/resources/logo_ocr.png").scaledToWidth(140, Qt.SmoothTransformation)
+        logo = QPixmap("n6_ocrmedical/resources/logo/logo_ocr.png").scaledToWidth(140, Qt.SmoothTransformation)
         brand.setPixmap(logo); brand.setAlignment(Qt.AlignHCenter)
         l.addWidget(brand)
         l.addSpacing(SIDE_MENU_ALIGN_WITH_DROP)
 
-        # Menu
         group = QButtonGroup(self); group.setExclusive(True)
         def menu_btn(text, icon_path, checked=False):
             b = QPushButton(text)
@@ -257,35 +236,37 @@ class Dashboard(QWidget):
             group.addButton(b)
             return b
 
-        l.addWidget(menu_btn("Home",    "n6_ocrmedical/resources/home.png", checked=True))
-        l.addWidget(menu_btn("All files","n6_ocrmedical/resources/folder.png"))
-        l.addWidget(menu_btn("Setting", "n6_ocrmedical/resources/settings.png"))
-        l.addWidget(menu_btn("Support", "n6_ocrmedical/resources/customer-support.png"))
-        l.addWidget(menu_btn("Review",  "n6_ocrmedical/resources/star.png"))
+        # chỉ 1 nút Home
+        self.btn_home = menu_btn("Home", "n6_ocrmedical/resources/logo/home.png", checked=True)
+        l.addWidget(self.btn_home)
+
+        l.addWidget(menu_btn("All files","n6_ocrmedical/resources/logo/folder.png"))
+        l.addWidget(menu_btn("Setting", "n6_ocrmedical/resources/logo/settings.png"))
+        l.addWidget(menu_btn("Support", "n6_ocrmedical/resources/logo/customer-support.png"))
+        l.addWidget(menu_btn("Review",  "n6_ocrmedical/resources/logo/star.png"))
+        self.btn_result = menu_btn("Result", "n6_ocrmedical/resources/logo/scan.png")
+        l.addWidget(self.btn_result)
+
         l.addStretch()
 
-        # Người dùng / avatar
         avatar = QLabel()
-        av_pix = QPixmap("n6_ocrmedical/resources/user.png").scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        av_pix = QPixmap("n6_ocrmedical/resources/logo/user.png").scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         avatar.setPixmap(av_pix); avatar.setAlignment(Qt.AlignHCenter)
         username = QLabel("User/Administrator"); username.setAlignment(Qt.AlignHCenter)
         username.setStyleSheet("color:#6b7280; font-size:14px;")
         l.addWidget(avatar); l.addWidget(username)
         return panel
 
-    # ----- 4.2
     def _build_middle_panel(self) -> QWidget:
         mid_layout = QVBoxLayout()
         mid_layout.setSpacing(GAP_CARD)
 
-        # ---- Thẻ trên cùng (tiêu đề + search + action + dropzone + storage + danh sách)
         top_card = QFrame()
         top_card.setStyleSheet(f"QFrame{{background:{PANEL_BG}; border-radius:12px;}}")
         m = QVBoxLayout(top_card)
         m.setContentsMargins(GAP_PANEL, GAP_PANEL, GAP_PANEL, GAP_PANEL)
         m.setSpacing(GAP_INSIDE)
 
-        # Header: tiêu đề + ô tìm kiếm
         header = QHBoxLayout()
         title = QLabel("OCR - Medical")
         title.setStyleSheet("font-size:25px; font-weight:900;")
@@ -297,23 +278,21 @@ class Dashboard(QWidget):
             "QLineEdit{border:1px solid #e5e7eb; border-radius:8px; padding-left:22px; background:#f9fafb;}"
             "QLineEdit:focus{border-color:#93c5fd; background:#fff;}"
         )
-        search.addAction(QIcon("n6_ocrmedical/resources/search.png"), QLineEdit.LeadingPosition)
+        search.addAction(QIcon("n6_ocrmedical/resources/logo/search.png"), QLineEdit.LeadingPosition)
 
         header.addWidget(title)
         header.addStretch()
         header.addWidget(search, 0)
         m.addLayout(header)
 
-        # Separator mảnh
         sep = QFrame()
         sep.setStyleSheet("background:#e5e7eb; min-height:2px; max-height:2px; border:none;")
         m.addWidget(sep)
 
-        # Hàng action (3 nút)
         def pill(text, icon_path, minw=210):
             b = QPushButton(text)
             b.setCursor(Qt.PointingHandCursor)
-            b.setFixedHeight(30)
+            b.setFixedHeight(30) 
             b.setMinimumWidth(minw)
             b.setIcon(QIcon(icon_path))
             b.setIconSize(QSize(16, 16))
@@ -324,41 +303,30 @@ class Dashboard(QWidget):
             return b
 
         row_actions = QHBoxLayout()
-        row_actions.addWidget(pill("Scan from Folder",   "n6_ocrmedical/resources/new-folder.png", 220), 0, Qt.AlignLeft)
+        row_actions.addWidget(pill("Scan from Folder",   "n6_ocrmedical/resources/logo/new-folder.png", 220), 0, Qt.AlignLeft)
         row_actions.addStretch()
-        row_actions.addWidget(pill("Capture with Camera","n6_ocrmedical/resources/camera.png",      240), 0, Qt.AlignCenter)
+        row_actions.addWidget(pill("Capture with Camera","n6_ocrmedical/resources/logo/camera.png",      240), 0, Qt.AlignCenter)
         row_actions.addStretch()
-        row_actions.addWidget(pill("Fetch from URL",     "n6_ocrmedical/resources/link.png",        220), 0, Qt.AlignRight)
+        row_actions.addWidget(pill("Fetch from URL",     "n6_ocrmedical/resources/logo/link.png",        220), 0, Qt.AlignRight)
         m.addLayout(row_actions)
 
-        # Dropzone
-            # callback: thêm file vào danh sách
         self.drop = DropZone(self.add_files)
         m.addWidget(self.drop)
         m.addSpacing(GAP_BELOW_DROP)
 
-        # Hàng chọn thư mục lưu trữ
         path_row = QHBoxLayout(); path_row.setSpacing(8)
-
         self.pick_btn = QPushButton("Storage Directory"); self.pick_btn.setFixedHeight(28)
-        self.pick_btn.setIcon(QIcon("n6_ocrmedical/resources/folder.png")); self.pick_btn.setIconSize(QSize(16, 16))
-        self.pick_btn.setStyleSheet(
-            "QPushButton{background:transparent; border:1px solid #e5e7eb; border-radius:8px; padding:6px 12px; font-weight:600;}"
-            "QPushButton:hover{background:#f9fafb;}"
-        )
+        self.pick_btn.setIcon(QIcon("n6_ocrmedical/resources/logo/folder.png")); self.pick_btn.setIconSize(QSize(16, 16))
 
         self.path_edit = QLineEdit("C:\\Users\\MY COMPUTER\\HIS\\OCR-Medical\\database")
-        self.path_edit.setStyleSheet("QLineEdit{border:1px solid #e5e7eb; border-radius:8px; padding:6px 8px; background:transparent;}")
 
         more = QPushButton("⋯"); more.setFixedSize(28, 28)
-        more.setStyleSheet("QPushButton{background:transparent; border:1px solid #e5e7eb; border-radius:8px;} QPushButton:hover{background:#f9fafb;}")
 
         path_row.addWidget(self.pick_btn)
         path_row.addWidget(self.path_edit, 1)
         path_row.addWidget(more)
         m.addLayout(path_row)
 
-        # Danh sách file
         self.total_lbl = QLabel("Total files: 0")
         m.addWidget(self.total_lbl)
 
@@ -366,9 +334,38 @@ class Dashboard(QWidget):
         self.file_list.setFixedHeight(FILE_LIST_HEIGHT)
         m.addWidget(self.file_list)
 
+        self.result_btn = QPushButton("Result")
+        self.result_btn.setCursor(Qt.PointingHandCursor)
+        self.result_btn.setFixedHeight(34)
+        self.result_btn.setEnabled(False)
+
+        self.result_btn.setStyleSheet("""
+            QPushButton {
+                border-radius:16px;
+                padding:6px 20px;
+                font-weight:600;
+            }
+            QPushButton:enabled {
+                background-color:#4f46e5;
+                color:white;
+            }
+            QPushButton:enabled:hover {
+                background-color:#4338ca;
+                color:white;
+            }
+            QPushButton:disabled {
+                background-color:#d1d5db;
+                color:#9ca3af;
+            }
+        """)
+
+        self.result_btn.clicked.connect(self.on_result_clicked)
+        m.addWidget(self.result_btn, 0, Qt.AlignHCenter)
+
+        self.file_list.itemSelectionChanged.connect(self.update_result_btn_state)
+
         mid_layout.addWidget(top_card)
 
-        # ---- Thẻ giới thiệu
         intro_card = QFrame()
         intro_card.setStyleSheet(f"QFrame{{background:{PANEL_BG}; border-radius:12px;}}")
         i = QVBoxLayout(intro_card)
@@ -377,7 +374,7 @@ class Dashboard(QWidget):
 
         i_title = QLabel("Introduction"); i_title.setStyleSheet("font-weight:900;")
         i.addWidget(i_title)
-
+        # Intro giữ nguyên
         row = QHBoxLayout(); row.setSpacing(16)
         def info_block(title, body):
             wrapper = QFrame(); wrapper.setStyleSheet("QFrame{background:#eef2ff; border-radius:10px;}")
@@ -404,7 +401,6 @@ class Dashboard(QWidget):
 
         return mid_container
 
-    # ----- 4.3
     def _build_right_panel(self) -> QWidget:
         right_layout = QVBoxLayout(); right_layout.setSpacing(GAP_CARD)
 
@@ -462,8 +458,8 @@ class Dashboard(QWidget):
         right_container.setLayout(right_layout)
         return right_container
 
-    # ====== 4.x HÀM NGHIỆP VỤ ======
 
+    # ====== NGHIỆP VỤ ======
     def update_greeting(self):
         """Đặt text + ảnh phù hợp theo giờ hiện tại."""
         h = datetime.now().hour
@@ -491,45 +487,14 @@ class Dashboard(QWidget):
             self.path_edit.setText(folder)
             self.populate_from_directory(folder)
 
-    def populate_from_directory(self, folder_path: str):
-        """Đọc toàn bộ file (không đi vào thư mục con) và hiển thị."""
-        self.file_list.clear()
-        self.history.clear()
-
-        if not folder_path or not os.path.isdir(folder_path):
-            self._update_total_label()
-            return
-
-        entries: List[tuple[str, str]] = []
-        try:
-            for name in os.listdir(folder_path):
-                full = os.path.join(folder_path, name)
-                if os.path.isfile(full):
-                    entries.append((name, full))
-        except Exception:
-            pass
-
-        # Sắp xếp theo tên
-        entries.sort(key=lambda x: x[0].lower())
-
-        for idx, (name, full) in enumerate(entries, start=1):
-            self._append_file_item(idx, name, full)
-
-        self._update_total_label()
-
     def add_files(self, files: List[str]):
-        """Thêm các file (từ dropzone hoặc file dialog) vào danh sách."""
         for f in files:
             name = os.path.basename(f) if f else "Unnamed"
             self._append_file_item(self.file_list.count() + 1, name, f)
         self._update_total_label()
 
-    # ----- Helpers nội bộ
-
     def _append_file_item(self, idx: int, name: str, full_path: str):
-        """Tạo 1 dòng ở danh sách và 1 dòng ở lịch sử cho file."""
         size = human_size(full_path)
-
         row = UploadRow(idx, name, size, "Ready")
         it = QListWidgetItem(self.file_list)
         it.setSizeHint(row.sizeHint())
@@ -541,23 +506,94 @@ class Dashboard(QWidget):
         hit.setSizeHint(hrow.sizeHint())
         self.history.addItem(hit)
         self.history.setItemWidget(hit, hrow)
+        it.setData(Qt.UserRole, full_path)   # lưu đường dẫn thật vào item
+
 
     def _update_total_label(self):
         self.total_lbl.setText(f"Total files: {self.file_list.count()}")
+
+    def update_result_btn_state(self):
+        self.result_btn.setEnabled(len(self.file_list.selectedItems()) > 0)
+    def on_result_clicked(self):
+        selected = self.file_list.selectedItems()
+        if not selected:
+            return
+
+        item = selected[0]
+        full_path = item.data(Qt.UserRole)
+
+        # 👉 Chuyển ngay sang ResultPage, hiển thị "Loading..."
+        main_win = self.window()
+        if hasattr(main_win, "result_page"):
+            main_win.result_page.set_result("⏳ Đang chạy OCR với Qwen... vui lòng chờ.")
+            main_win.show_result_page()
+
+        # 👉 Tạo thread để gọi model
+        self.thread = QThread()
+        self.worker = OCRWorker(full_path, "Please extract text from this medical test image.")
+        self.worker.moveToThread(self.thread)
+
+        # Kết nối tín hiệu
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.on_ocr_finished)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        # Start thread
+        self.thread.start()
+
+    def on_ocr_finished(self, result_text):
+        # Khi có kết quả thì update vào ResultPage
+        main_win = self.window()
+        if hasattr(main_win, "result_page"):
+            main_win.result_page.set_result(result_text)
+
 
 
 # =========================
 # 5) MAIN WINDOW
 # =========================
-
+from result_page import ResultPage
 class MainWindow(QMainWindow):
-    """Cửa sổ chính của ứng dụng."""
     def __init__(self):
         super().__init__()
         self.setWindowTitle("OCR - Medical")
         self.resize(1180, 700)
-        self.setStyleSheet(f"QWidget{{font-family:'Segoe UI'; font-size:11.5px; background:{APP_BG};}}")
-        self.setCentralWidget(Dashboard())
+
+        self.stacked = QStackedWidget()
+        self.dashboard = Dashboard()
+        self.result_page = ResultPage()
+
+        self.stacked.addWidget(self.dashboard)   # index 0
+        self.stacked.addWidget(self.result_page) # index 1
+        self.setCentralWidget(self.stacked)
+
+        # 🔹 Nút Result trong sidebar Dashboard
+        self.dashboard.btn_result.clicked.connect(self.show_result_page)
+        # 🔹 Nút Result ở giữa Dashboard
+        self.dashboard.result_requested.connect(self.show_result_page)
+        # 🔹 Nút Back trong ResultPage
+        self.result_page.back_btn.clicked.connect(self.show_dashboard)
+        # 🔹 Nút Home trong sidebar ResultPage
+        self.result_page.btn_home.clicked.connect(self.show_dashboard)
+
+    def show_result_page(self):
+        self.stacked.setCurrentIndex(1)
+        # ép sidebar ResultPage highlight đúng
+        if hasattr(self.result_page, "btn_result"):
+            self.result_page.btn_result.setChecked(True)
+        if hasattr(self.result_page, "btn_home"):
+            self.result_page.btn_home.setChecked(False)
+
+    def show_dashboard(self):
+        self.stacked.setCurrentIndex(0)
+        # ép sidebar Dashboard highlight đúng
+        if hasattr(self.dashboard, "btn_home"):
+            self.dashboard.btn_home.setChecked(True)
+        if hasattr(self.dashboard, "btn_result"):
+            self.dashboard.btn_result.setChecked(False)
+
 
 
 # =========================

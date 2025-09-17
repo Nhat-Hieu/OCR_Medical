@@ -10,7 +10,7 @@ from PySide6.QtGui import QFontMetrics, QPainter, QPen, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFrame, QPushButton, QLabel, QListWidget, QListWidgetItem,
-    QFileDialog, QSizePolicy, QLineEdit, QButtonGroup, QStackedWidget,
+    QFileDialog, QSizePolicy, QLineEdit, QButtonGroup, QStackedWidget, QSpacerItem,
     QGridLayout,
 )
 from PySide6.QtCore import QThread, Signal as CoreSignal, QObject
@@ -212,27 +212,26 @@ class Dashboard(QWidget):
         root.setHorizontalSpacing(GUTTER)
         root.setVerticalSpacing(GUTTER)
 
-        # Cấu hình 12 cột/12 hàng với trọng số bằng nhau
+        # Cấu hình grid stretch
         for c in range(GRID_COLS):
             root.setColumnStretch(c, 1)
         for r in range(GRID_ROWS):
             root.setRowStretch(r, 1)
 
+        # Các panel
         left_panel = self._build_left_panel()
-        mid_container = self._build_middle_panel()
+        top_card, intro_card = self._build_middle_panel()
         right_container = self._build_right_panel()
 
-        # Thêm vào lưới: left=2 cột x 12 hàng; mid=7 cột x 12 hàng; right=3 cột x 12 hàng
-        # Cột: 0..11
-        # left:  col 0..1  (span 2)
-        # mid:   col 2..8  (span 7)
-        # right: col 9..11 (span 3)
-        root.addWidget(left_panel, 0, 0, 12, 2)
-        root.addWidget(mid_container, 0, 2, 12, 8)
-        root.addWidget(right_container, 0, 10, 12, 2)
+        # ---- Add vào grid ----
+        root.addWidget(left_panel, 0, 0, 12, 2)        # Left: col 0-1
+        root.addWidget(top_card, 0, 2, 8, 7)           # Mid trên: col 2-8 (8 hàng)
+        root.addWidget(intro_card, 8, 2, 4, 7)         # Mid dưới: col 2-8 (4 hàng)
+        root.addWidget(right_container, 0, 9, 12, 3)   # Right: col 9-11
 
         self.setLayout(root)
 
+    # ---------------- LEFT PANEL ----------------
     def _build_left_panel(self) -> QWidget:
         panel = QFrame()
         panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
@@ -244,17 +243,21 @@ class Dashboard(QWidget):
 
         brand = QLabel()
         logo = QPixmap("n6_ocrmedical/resources/logo/logo_ocr.png").scaledToWidth(140, Qt.SmoothTransformation)
-        brand.setPixmap(logo); brand.setAlignment(Qt.AlignHCenter)
+        brand.setPixmap(logo)
+        brand.setAlignment(Qt.AlignHCenter)
         l.addWidget(brand)
 
         l.addSpacing(SIDE_MENU_ALIGN_WITH_DROP)
 
-        group = QButtonGroup(self); group.setExclusive(True)
+        group = QButtonGroup(self)
+        group.setExclusive(True)
 
         def menu_btn(text, icon_path, checked=False):
             b = QPushButton(text)
-            b.setCheckable(True); b.setCursor(Qt.PointingHandCursor)
-            b.setIcon(QIcon(icon_path)); b.setIconSize(QSize(20, 20))
+            b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setIcon(QIcon(icon_path))
+            b.setIconSize(QSize(20, 20))
             b.setStyleSheet(
                 """
                 QPushButton{ background:transparent; border:1px solid transparent; text-align:left;
@@ -268,10 +271,10 @@ class Dashboard(QWidget):
             group.addButton(b)
             return b
 
-        # Sidebar
+        # Sidebar buttons
         self.btn_home = menu_btn("Home", "n6_ocrmedical/resources/logo/home.png", checked=True)
         l.addWidget(self.btn_home)
-        l.addWidget(menu_btn("All files","n6_ocrmedical/resources/logo/folder.png"))
+        l.addWidget(menu_btn("All files", "n6_ocrmedical/resources/logo/folder.png"))
         l.addWidget(menu_btn("Setting", "n6_ocrmedical/resources/logo/settings.png"))
         l.addWidget(menu_btn("Support", "n6_ocrmedical/resources/logo/customer-support.png"))
         l.addWidget(menu_btn("Review", "n6_ocrmedical/resources/logo/star.png"))
@@ -282,17 +285,18 @@ class Dashboard(QWidget):
 
         avatar = QLabel()
         av_pix = QPixmap("n6_ocrmedical/resources/logo/user.png").scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        avatar.setPixmap(av_pix); avatar.setAlignment(Qt.AlignHCenter)
-        username = QLabel("User/Administrator"); username.setAlignment(Qt.AlignHCenter)
+        avatar.setPixmap(av_pix)
+        avatar.setAlignment(Qt.AlignHCenter)
+        username = QLabel("User/Administrator")
+        username.setAlignment(Qt.AlignHCenter)
         username.setStyleSheet("color:#6b7280; font-size:14px;")
-        l.addWidget(avatar); l.addWidget(username)
+        l.addWidget(avatar)
+        l.addWidget(username)
 
         return panel
 
-    def _build_middle_panel(self) -> QWidget:
-        mid_layout = QVBoxLayout()
-        mid_layout.setSpacing(GAP_CARD)
-
+    # ---------------- MID PANEL ----------------
+    def _build_middle_panel(self):
         # --- Top card ---
         top_card = QFrame()
         top_card.setStyleSheet(f"QFrame{{background:{PANEL_BG}; border-radius:12px;}}")
@@ -300,6 +304,7 @@ class Dashboard(QWidget):
         m.setContentsMargins(GAP_PANEL, GAP_PANEL, GAP_PANEL, GAP_PANEL)
         m.setSpacing(GAP_INSIDE)
 
+        # Header (title + search)
         header = QHBoxLayout()
         title = QLabel("OCR - Medical")
         title.setStyleSheet("font-size:25px; font-weight:900;")
@@ -318,7 +323,8 @@ class Dashboard(QWidget):
         header.addWidget(search, 0)
         m.addLayout(header)
 
-        sep = QFrame(); sep.setStyleSheet("background:#e5e7eb; min-height:2px; max-height:2px; border:none;")
+        sep = QFrame()
+        sep.setStyleSheet("background:#e5e7eb; min-height:2px; max-height:2px; border:none;")
         m.addWidget(sep)
 
         def pill(text, icon_path, minw=210):
@@ -337,20 +343,25 @@ class Dashboard(QWidget):
         row_actions = QHBoxLayout()
         row_actions.addWidget(pill("Scan from Folder", "n6_ocrmedical/resources/logo/new-folder.png", 220), 0, Qt.AlignLeft)
         row_actions.addStretch()
-        row_actions.addWidget(pill("Capture with Camera","n6_ocrmedical/resources/logo/camera.png", 240), 0, Qt.AlignCenter)
+        row_actions.addWidget(pill("Capture with Camera", "n6_ocrmedical/resources/logo/camera.png", 240), 0, Qt.AlignCenter)
         row_actions.addStretch()
         row_actions.addWidget(pill("Fetch from URL", "n6_ocrmedical/resources/logo/link.png", 220), 0, Qt.AlignRight)
         m.addLayout(row_actions)
 
+        # Drop zone
         self.drop = DropZone(self.add_files)
         m.addWidget(self.drop)
         m.addSpacing(GAP_BELOW_DROP)
 
-        path_row = QHBoxLayout(); path_row.setSpacing(8)
-        self.pick_btn = QPushButton("Storage Directory"); self.pick_btn.setFixedHeight(28)
-        self.pick_btn.setIcon(QIcon("n6_ocrmedical/resources/logo/folder.png")); self.pick_btn.setIconSize(QSize(16, 16))
+        path_row = QHBoxLayout()
+        path_row.setSpacing(8)
+        self.pick_btn = QPushButton("Storage Directory")
+        self.pick_btn.setFixedHeight(28)
+        self.pick_btn.setIcon(QIcon("n6_ocrmedical/resources/logo/folder.png"))
+        self.pick_btn.setIconSize(QSize(16, 16))
         self.path_edit = QLineEdit("C:\\Users\\MY COMPUTER\\HIS\\OCR-Medical\\database")
-        more = QPushButton("⋯"); more.setFixedSize(28, 28)
+        more = QPushButton("⋯")
+        more.setFixedSize(28, 28)
 
         path_row.addWidget(self.pick_btn)
         path_row.addWidget(self.path_edit, 1)
@@ -388,17 +399,25 @@ class Dashboard(QWidget):
         i.setContentsMargins(GAP_PANEL, GAP_PANEL, GAP_PANEL, GAP_PANEL)
         i.setSpacing(10)
 
-        i_title = QLabel("Introduction"); i_title.setStyleSheet("font-weight:900;")
+        i_title = QLabel("Introduction")
+        i_title.setStyleSheet("font-weight:900;")
         i.addWidget(i_title)
 
-        row = QHBoxLayout(); row.setSpacing(16)
+        row = QHBoxLayout()
+        row.setSpacing(16)
 
         def info_block(title, body):
-            wrapper = QFrame(); wrapper.setStyleSheet("QFrame{background:#eef2ff; border-radius:10px;}")
-            vl = QVBoxLayout(wrapper); vl.setContentsMargins(10, 8, 10, 8)
-            t = QLabel(title); t.setStyleSheet("font-weight:800;")
-            b = QLabel(body); b.setStyleSheet("color:#4b5563;"); b.setWordWrap(True)
-            vl.addWidget(t); vl.addWidget(b)
+            wrapper = QFrame()
+            wrapper.setStyleSheet("QFrame{background:#eef2ff; border-radius:10px;}")
+            vl = QVBoxLayout(wrapper)
+            vl.setContentsMargins(10, 8, 10, 8)
+            t = QLabel(title)
+            t.setStyleSheet("font-weight:800;")
+            b = QLabel(body)
+            b.setStyleSheet("color:#4b5563;")
+            b.setWordWrap(True)
+            vl.addWidget(t)
+            vl.addWidget(b)
             return wrapper
 
         row.addWidget(info_block("Language", "Choose Vietnamese/English for extraction and UI."), 1)
@@ -406,69 +425,68 @@ class Dashboard(QWidget):
         row.addWidget(info_block("Table extractor", "Detect and parse tables to structured CSV/JSON."), 1)
         i.addLayout(row)
 
-        # Gắn vào mid layout
-        mid_layout.addWidget(top_card)
-        mid_layout.addWidget(intro_card)
-
-        mid_container = QFrame()
-        mid_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        mid_container.setStyleSheet("QFrame{border:none;}")
-        mid_container.setLayout(mid_layout)
-
-        # Sự kiện: chọn thư mục → load danh sách
+        # Sự kiện: chọn thư mục
         self.pick_btn.clicked.connect(self.choose_storage_dir)
-        return mid_container
 
+        return top_card, intro_card
+
+    # ---------------- RIGHT PANEL ----------------
     def _build_right_panel(self) -> QWidget:
         right_container = QFrame()
         right_container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         right_container.setStyleSheet("QFrame{border:none;}")
 
-        # Grid 12 hàng cho panel phải: greeting 4 hàng, history 8 hàng
         grid = QGridLayout(right_container)
-        grid.setContentsMargins(0, 0, 0, 0)  # biên ngoài đã do root quản lý
+        grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(0)
         grid.setVerticalSpacing(GUTTER)
         for r in range(12):
             grid.setRowStretch(r, 1)
         grid.setColumnStretch(0, 1)
 
-        # --- Card lời chào ---
-        greeting = QFrame(); greeting.setStyleSheet(f"QFrame{{background:{PANEL_BG}; border-radius:12px;}}")
-        rg = QVBoxLayout(greeting); rg.setAlignment(Qt.AlignCenter)
+        # Greeting card
+        greeting = QFrame()
+        greeting.setStyleSheet(f"QFrame{{background:{PANEL_BG}; border-radius:12px;}}")
+        rg = QVBoxLayout(greeting)
+        rg.setAlignment(Qt.AlignCenter)
         rg.setContentsMargins(GAP_PANEL, GAP_PANEL, GAP_PANEL, GAP_PANEL)
 
-        self.greet_lbl1 = QLabel(); self.greet_lbl1.setAlignment(Qt.AlignCenter)
+        self.greet_lbl1 = QLabel()
+        self.greet_lbl1.setAlignment(Qt.AlignCenter)
         self.greet_lbl1.setStyleSheet("font-size:20px; font-weight:700;")
-        self.greet_lbl2 = QLabel("Doctor."); self.greet_lbl2.setAlignment(Qt.AlignCenter)
+        self.greet_lbl2 = QLabel("Doctor.")
+        self.greet_lbl2.setAlignment(Qt.AlignCenter)
         self.greet_lbl2.setStyleSheet("font-size:20px; font-weight:700;")
-        self.greet_img = QLabel(); self.greet_img.setAlignment(Qt.AlignCenter)
+        self.greet_img = QLabel()
+        self.greet_img.setAlignment(Qt.AlignCenter)
 
         rg.addWidget(self.greet_lbl1)
         rg.addWidget(self.greet_lbl2)
         rg.addWidget(self.greet_img)
 
-        # Hẹn giờ cập nhật
+        # Greeting timer
         self._greet_timer = QTimer(greeting)
         self._greet_timer.setInterval(30 * 60 * 1000)  # 30 phút
         self._greet_timer.timeout.connect(self.update_greeting)
         self.update_greeting()
         self._greet_timer.start()
 
-        # --- Card lịch sử ---
-        history_card = QFrame(); history_card.setStyleSheet(f"QFrame{{background:{PANEL_BG}; border-radius:12px;}}")
+        # History card
+        history_card = QFrame()
+        history_card.setStyleSheet(f"QFrame{{background:{PANEL_BG}; border-radius:12px;}}")
         rh = QVBoxLayout(history_card)
         rh.setContentsMargins(GAP_PANEL, GAP_PANEL, GAP_PANEL, GAP_PANEL)
-        h_title = QLabel("History"); h_title.setStyleSheet("font-size:18px; font-weight:700;")
+        h_title = QLabel("History")
+        h_title.setStyleSheet("font-size:18px; font-weight:700;")
         self.history = QListWidget()
         rh.addWidget(h_title)
         rh.addWidget(self.history, 1)
 
-        # Đặt widget theo span hàng: greeting 0..3, history 4..11
         grid.addWidget(greeting, 0, 0, 4, 1)
         grid.addWidget(history_card, 4, 0, 8, 1)
 
         return right_container
+
 
     # ====== NGHIỆP VỤ ======
     def update_greeting(self):
@@ -550,7 +568,7 @@ class Dashboard(QWidget):
         if hasattr(main_win, "result_page"):
             # Cập nhật ảnh + file info
             main_win.result_page.set_image_info(full_path)
-            main_win.result_page.set_result("⏳ Đang chạy OCR với Qwen... vui lòng chờ.")
+            main_win.result_page.set_result("🔄 OCR đang quét dữ liệu, đợi tí nhé!")
 
             main_win.show_result_page()
 

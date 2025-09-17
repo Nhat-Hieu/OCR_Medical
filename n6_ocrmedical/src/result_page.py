@@ -1,24 +1,21 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTextEdit, QFrame, QButtonGroup
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMessageBox, QFileDialog,
+    QTextEdit, QFrame, QButtonGroup, QGridLayout
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap
 import os
 
-# Constants
+
 PANEL_BG   = "#ffffff"
 GAP_PANEL  = 26
-LEFT_W     = 170
 SIDE_MENU_ALIGN_WITH_DROP = 44
 
 
-# Dùng lại UploadRow giống Home
 class UploadRow(QWidget):
     def __init__(self, idx: int, filename: str, size_text: str, status: str = "Ready"):
         super().__init__()
         self.setStyleSheet("QLabel{background:transparent;}")
-
         lay = QHBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(8)
@@ -50,20 +47,28 @@ class ResultPage(QWidget):
     def __init__(self):
         super().__init__()
 
-        root = QHBoxLayout(self)
-        root.setContentsMargins(30, 30, 30, 30)
-        root.setSpacing(30)
+        root = QGridLayout(self)
+        root.setContentsMargins(24, 24, 24, 24)
+        root.setHorizontalSpacing(24)
+        root.setVerticalSpacing(24)
 
-        left_panel   = self._build_left_panel()
-        mid_panel    = self._build_middle_panel()
+        # Grid 12x12
+        for c in range(12):
+            root.setColumnStretch(c, 1)
+        for r in range(12):
+            root.setRowStretch(r, 1)
 
-        root.addWidget(left_panel, 0)
-        root.addWidget(mid_panel, 1)
+        # Sidebar (3 cột)
+        left_panel = self._build_left_panel()
+        root.addWidget(left_panel, 0, 0, 12, 2)
+
+        # Main (9 cột)
+        mid_panel = self._build_middle_panel()
+        root.addWidget(mid_panel, 0, 2, 12, 10)
 
     # ---------------- Sidebar ----------------
     def _build_left_panel(self) -> QWidget:
         panel = QFrame()
-        panel.setFixedWidth(LEFT_W)
         panel.setStyleSheet(f"QFrame{{background:{PANEL_BG}; border:none; border-radius:12px;}}")
 
         l = QVBoxLayout(panel)
@@ -72,13 +77,14 @@ class ResultPage(QWidget):
 
         # Logo
         brand = QLabel()
-        logo = QPixmap("n6_ocrmedical/resources/logo_ocr.png").scaledToWidth(140, Qt.SmoothTransformation)
+        logo = QPixmap("n6_ocrmedical/resources/logo/logo_ocr.png").scaledToWidth(140, Qt.SmoothTransformation)
         brand.setPixmap(logo)
         brand.setAlignment(Qt.AlignHCenter)
         l.addWidget(brand)
         l.addSpacing(SIDE_MENU_ALIGN_WITH_DROP)
 
         group = QButtonGroup(self); group.setExclusive(True)
+
         def menu_btn(text, icon_path, checked=False):
             b = QPushButton(text)
             b.setCheckable(True)
@@ -96,25 +102,21 @@ class ResultPage(QWidget):
             group.addButton(b)
             return b
 
-        # Menu items
-        self.btn_home    = menu_btn("Home",    "n6_ocrmedical/resources/home.png")
-        self.btn_all     = menu_btn("All files","n6_ocrmedical/resources/folder.png")
-        self.btn_setting = menu_btn("Setting", "n6_ocrmedical/resources/settings.png")
-        self.btn_support = menu_btn("Support", "n6_ocrmedical/resources/customer-support.png")
-        self.btn_review  = menu_btn("Review",  "n6_ocrmedical/resources/star.png")
-        self.btn_result  = menu_btn("Result",  "n6_ocrmedical/resources/result.png", checked=True)
+        self.btn_home    = menu_btn("Home",    "n6_ocrmedical/resources/logo/home.png")
+        self.btn_all     = menu_btn("All files","n6_ocrmedical/resources/logo/folder.png")
+        self.btn_setting = menu_btn("Setting", "n6_ocrmedical/resources/logo/settings.png")
+        self.btn_support = menu_btn("Support", "n6_ocrmedical/resources/logo/customer-support.png")
+        self.btn_review  = menu_btn("Review",  "n6_ocrmedical/resources/logo/star.png")
+        self.btn_result  = menu_btn("Result",  "n6_ocrmedical/resources/logo/scan.png", checked=True)
 
-        l.addWidget(self.btn_home)
-        l.addWidget(self.btn_all)
-        l.addWidget(self.btn_setting)
-        l.addWidget(self.btn_support)
-        l.addWidget(self.btn_review)
-        l.addWidget(self.btn_result)
+        for b in (self.btn_home, self.btn_all, self.btn_setting,
+                  self.btn_support, self.btn_review, self.btn_result):
+            l.addWidget(b)
         l.addStretch()
 
         # Avatar
         avatar = QLabel()
-        av_pix = QPixmap("n6_ocrmedical/resources/user.png").scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        av_pix = QPixmap("n6_ocrmedical/resources/logo/user.png").scaled(24, 24, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         avatar.setPixmap(av_pix)
         avatar.setAlignment(Qt.AlignHCenter)
 
@@ -124,9 +126,10 @@ class ResultPage(QWidget):
 
         l.addWidget(avatar)
         l.addWidget(username)
+
         return panel
 
-    # ---------------- Middle ----------------
+    # ---------------- Main ----------------
     def _build_middle_panel(self) -> QWidget:
         panel = QFrame()
         panel.setStyleSheet(f"QFrame{{background:{PANEL_BG}; border-radius:12px;}}")
@@ -192,9 +195,9 @@ class ResultPage(QWidget):
         # Buttons row
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        self.copy_btn = QPushButton("Copy")
-        self.download_btn = QPushButton("Download")
-        for b in (self.copy_btn, self.download_btn):
+        self.download_btn = QPushButton("Save")
+        self.download_btn.clicked.connect(self.on_download_clicked)
+        for b in (self.download_btn,):
             b.setFixedHeight(32)
             b.setStyleSheet("""
                 QPushButton {
@@ -241,3 +244,24 @@ class ResultPage(QWidget):
         # Thêm UploadRow (giống Home)
         row = UploadRow(1, name, size, "Ready")
         self.file_info_container.addWidget(row)
+    def on_download_clicked(self):
+        text = self.result_text.toPlainText()
+        if not text.strip():
+            QMessageBox.warning(self, "No Content", "Không có nội dung để lưu.")
+            return
+
+        # Hộp thoại chọn nơi lưu
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save OCR Result",
+            "ocr_result.txt",
+            "Text Files (.txt);;All Files (.*)"
+        )
+        if path:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text)
+                QMessageBox.information(self, "Saved", f"Đã lưu kết quả vào:\n{path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Lỗi khi lưu file:\n{e}")
+

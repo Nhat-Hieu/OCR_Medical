@@ -1,6 +1,6 @@
 import base64, json, pathlib, tempfile, requests
 
-BASE_URL = "http://192.168.1.180:1234/v1"
+BASE_URL = "http://192.168.1.197:1234/v1"
 MODEL_ID = "qwen/qwen2.5-vl-7b"
 
 def infer_mime_from_filename(filename: str) -> str:
